@@ -1,6 +1,7 @@
 package com.soundcloud.android.crop.example;
 
 import com.soundcloud.android.crop.Crop;
+import com.soundcloud.android.crop.ExifUtil;
 
 import android.app.Activity;
 import android.content.Intent;
@@ -56,7 +57,10 @@ public class MainActivity extends Activity {
 
     private void handleCrop(int resultCode, Intent result) {
         if (resultCode == RESULT_OK) {
+            Uri fileUri = Crop.getOutput(result);
+            int rotation = ExifUtil.readExifRotation(getContentResolver(), fileUri);
             resultView.setImageURI(Crop.getOutput(result));
+            resultView.setRotation(rotation);
         } else if (resultCode == Crop.RESULT_ERROR) {
             Toast.makeText(this, Crop.getError(result).getMessage(), Toast.LENGTH_SHORT).show();
         }

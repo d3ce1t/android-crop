@@ -81,6 +81,24 @@ public class CropImageActivity extends MonitoredActivity {
         startCrop();
     }
 
+    public float getRotation() {
+        return rotateBitmap.getRotation();
+    }
+
+    public void rotate(int degrees) {
+
+        if (degrees < 0) {
+            degrees = 360 - Math.abs(degrees) % 360;
+        }
+
+        int rotation = (rotateBitmap.getRotation() + degrees) % 360;
+        rotateBitmap.setRotation(rotation);
+        imageView.setImageRotateBitmapResetBase(rotateBitmap, true);
+        new Cropper().setupHighlightView(cropView);
+        cropView.invalidate();
+        exifRotation = rotation;
+    }
+
     @TargetApi(Build.VERSION_CODES.KITKAT)
     private void setupWindowFlags() {
         requestWindowFeature(Window.FEATURE_NO_TITLE);
@@ -130,7 +148,8 @@ public class CropImageActivity extends MonitoredActivity {
 
         sourceUri = intent.getData();
         if (sourceUri != null) {
-            exifRotation = CropUtil.getExifRotation(CropUtil.getFromMediaUri(this, getContentResolver(), sourceUri));
+
+            exifRotation = ExifUtil.readExifRotation(getContentResolver(), sourceUri);
 
             InputStream is = null;
             try {
@@ -216,12 +235,19 @@ public class CropImageActivity extends MonitoredActivity {
 
     private class Cropper {
 
-        private void makeDefault() {
+        private void addHighlightView() {
+
             if (rotateBitmap == null) {
                 return;
             }
 
             HighlightView hv = new HighlightView(imageView);
+            setupHighlightView(hv);
+            imageView.add(hv);
+        }
+
+        private void setupHighlightView(HighlightView hv) {
+
             final int width = rotateBitmap.getWidth();
             final int height = rotateBitmap.getHeight();
 
@@ -245,17 +271,19 @@ public class CropImageActivity extends MonitoredActivity {
 
             RectF cropRect = new RectF(x, y, x + cropWidth, y + cropHeight);
             hv.setup(imageView.getUnrotatedMatrix(), imageRect, cropRect, aspectX != 0 && aspectY != 0);
-            imageView.add(hv);
+        }
+
+        private void makeDefault(HighlightView hv) {
+            cropView = hv;
+            cropView.setFocus(true);
         }
 
         public void crop() {
             handler.post(new Runnable() {
                 public void run() {
-                    makeDefault();
-                    imageView.invalidate();
+                    addHighlightView();
                     if (imageView.highlightViews.size() == 1) {
-                        cropView = imageView.highlightViews.get(0);
-                        cropView.setFocus(true);
+                        makeDefault(imageView.highlightViews.get(0));
                     }
                 }
             });
@@ -299,6 +327,7 @@ public class CropImageActivity extends MonitoredActivity {
             imageView.center();
             imageView.highlightViews.clear();
         }
+
         saveImage(croppedImage);
     }
 
@@ -376,6 +405,7 @@ public class CropImageActivity extends MonitoredActivity {
     }
 
     private void saveOutput(Bitmap croppedImage) {
+
         if (saveUri != null) {
             OutputStream outputStream = null;
             try {
@@ -390,10 +420,11 @@ public class CropImageActivity extends MonitoredActivity {
                 CropUtil.closeSilently(outputStream);
             }
 
-            CropUtil.copyExifRotation(
-                    CropUtil.getFromMediaUri(this, getContentResolver(), sourceUri),
-                    CropUtil.getFromMediaUri(this, getContentResolver(), saveUri)
-            );
+            // For some reason, CropUtil.getFromMediaUri does not work with files from public
+            // shared directories. However, it still works with own Uris. Because of this,
+            // copyExifRotation method has been modified.
+            ExifUtil.copyExifRotation(getContentResolver(), sourceUri,
+                    CropUtil.getFromMediaUri(this, getContentResolver(), saveUri));
 
             setResultUri(saveUri);
         }
@@ -433,5 +464,4 @@ public class CropImageActivity extends MonitoredActivity {
     private void setResultException(Throwable throwable) {
         setResult(Crop.RESULT_ERROR, new Intent().putExtra(Crop.Extra.ERROR, throwable));
     }
-
 }
